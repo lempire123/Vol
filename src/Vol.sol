@@ -32,7 +32,7 @@ contract Vol {
    uint256 public bettingWindow;
    // Array of epochs
    Epoch[] public epochs;
-   // Mapping to user positions to epoch Id
+   // Mapping of user positions to epoch Id
    mapping(uint256 => Position[]) public userPositions;
    // Owner address
    address public owner;
