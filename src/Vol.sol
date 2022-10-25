@@ -122,15 +122,13 @@ contract Vol {
       epoch.status = Status.Ended;
       epoch.realizedVol = SignedMath.abs(int(epoch.startPrice - epoch.finalPrice)) / epoch.startPrice * 100;
       uint256 ITMCapital;
-      uint256 totalCapital;
       for(uint256 i; i < userPositions[epochIndex].length; ++i) {
-         totalCapital += userPositions[epochIndex][i].capitalProvided;
          if(userPositions[epochIndex][i].volPrediction == epoch.realizedVol) {
             ITMCapital += userPositions[epochIndex][i].capitalProvided;
          }
       }
       if(ITMCapital == 0) {
-         ownerMoney += totalCapital;
+         ownerMoney += epoch.totalUsdc;
       }
 
       epoch.payOffPerDollar = epoch.totalUsdc / ITMCapital;
