@@ -54,7 +54,7 @@ contract Vol {
       address user;
    }
 
-   // Epoch for each day
+   // Epoch for each time interval
    struct Epoch {
       uint256 startTime;
       uint256 startPrice;
