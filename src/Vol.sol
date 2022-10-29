@@ -98,7 +98,6 @@ contract Vol {
       uint256 capitalProvided;
       uint256 volPrediction;
       bool claimedReward;
-      uint256 epochId;
       address user;
    }
 
@@ -133,7 +132,7 @@ contract Vol {
       epochs.push(
          Epoch(
             block.timestamp,
-            getPrice(),
+            0,
             0,
             0,
             0,
@@ -151,7 +150,7 @@ contract Vol {
       require(block.timestamp < currentEpoch.startTime + bettingWindow);
       usdc.transferFrom(msg.sender, address(this), _amount);
       currentEpoch.totalUsdc += _amount;
-      userPositions[epochId].push(Position(_amount, _vol, false, epochId, msg.sender));
+      userPositions[epochId].push(Position(_amount, _vol, false, msg.sender));
    }
 
 
@@ -215,10 +214,9 @@ contract Vol {
 
    // @notice Function is called after bettingWindow is over
    function setStartPrice() external {
-      require(epochs.length - 1 != 0);
       uint256 epochIndex = epochs.length - 1;
       Epoch storage epoch = epochs[epochIndex];
-      require(epoch.startTime + bettingWindow < block.timestamp);
+      require(epoch.startTime + bettingWindow <= block.timestamp);
       epoch.startPrice = getPrice();
    }
 

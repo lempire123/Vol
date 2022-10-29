@@ -63,7 +63,7 @@ contract CounterTest is Test {
             Interval,
             betWindow
         );
-        deal(usdc, address(this), billi);
+        deal(usdc, address(this), type(uint256).max);
         IERC20(usdc).approve(address(vol), type(uint256).max);
         IERC20(usdc).approve(address(router), type(uint256).max);
     }
@@ -71,12 +71,11 @@ contract CounterTest is Test {
     function testBet() public {
         vol.bet(1_000, 4);
         vol.bet(1_000, 5);
+        vm.warp(block.timestamp + 1 hours);
+        vol.setStartPrice();
         swap(1_000_000);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(block.timestamp + 23 hours);
         vol.finalizeEpoch();
-        uint256 balanceBefore = IERC20(usdc).balanceOf(address(this));
-        vol.claim(0);
-        uint256 balanceAfter = IERC20(usdc).balanceOf(address(this));
         (uint256 startTime,
         uint256 startPrice,
         uint256 finalPrice,
