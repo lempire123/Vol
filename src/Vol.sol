@@ -5,11 +5,57 @@ import "openzeppelin-contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/utils/math/SignedMath.sol";
 
 
-/// @notice UniswapV2 pair interface
 interface IUniswapV2Pair {
-   function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
-}
+    event Approval(address indexed owner, address indexed spender, uint value);
+    event Transfer(address indexed from, address indexed to, uint value);
 
+    function name() external pure returns (string memory);
+    function symbol() external pure returns (string memory);
+    function decimals() external pure returns (uint8);
+    function totalSupply() external view returns (uint);
+    function balanceOf(address owner) external view returns (uint);
+    function allowance(address owner, address spender) external view returns (uint);
+
+    function approve(address spender, uint value) external returns (bool);
+    function transfer(address to, uint value) external returns (bool);
+    function transferFrom(address from, address to, uint value) external returns (bool);
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+    function nonces(address owner) external view returns (uint);
+
+    function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
+
+    event Mint(address indexed sender, uint amount0, uint amount1);
+    event Burn(address indexed sender, uint amount0, uint amount1, address indexed to);
+    event Swap(
+        address indexed sender,
+        uint amount0In,
+        uint amount1In,
+        uint amount0Out,
+        uint amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint);
+    function factory() external view returns (address);
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function price0CumulativeLast() external view returns (uint);
+    function price1CumulativeLast() external view returns (uint);
+    function kLast() external view returns (uint);
+
+    function mint(address to) external returns (uint liquidity);
+    function burn(address to) external returns (uint amount0, uint amount1);
+    function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data) external;
+    function skim(address to) external;
+    function sync() external;
+
+    function initialize(address, address) external;
+}
+   
 /**
 @title King of Vol
 @author Lempire
@@ -21,7 +67,7 @@ interface IUniswapV2Pair {
 contract Vol {
    using SignedMath for uint256;
    // UniswapV2pair used as oracle
-   IUniswapV2Pair pair;
+   IUniswapV2Pair public pair;
    // Token who's vol is being speculated on
    IERC20 public token;
    // Vol denomination
@@ -38,6 +84,8 @@ contract Vol {
    address public owner;
    // usdc given to humble owner
    uint256 public ownerMoney;
+   // usdc decimals
+   uint256 public usdcDecimals = 6;
 
    // Status of each epoch
    enum Status {
@@ -72,14 +120,28 @@ contract Vol {
       address _usdc,
       uint256 _timeInterval,
       uint256 _bettingWindow
-      )  {
-         pair = IUniswapV2Pair(_pair);
-         token = IERC20(_token);
-         usdc = IERC20(_usdc);
-         timeInterval = _timeInterval;
-         bettingWindow = _bettingWindow;
-      }
+   )  {
+      pair = IUniswapV2Pair(_pair);
+      token = IERC20(_token);
+      usdc = IERC20(_usdc);
+      timeInterval = _timeInterval;
+      bettingWindow = _bettingWindow;
+      init();
+   }
 
+   function init() internal {
+      epochs.push(
+         Epoch(
+            block.timestamp,
+            getPrice(),
+            0,
+            0,
+            0,
+            0,
+            Status.Active
+            )
+      );
+   }
    // @notice Function allows anyone to make a bet on the day's vol
    // @param _amount Amount of usdc to bet
    // @param _vol percentage move expected
@@ -117,10 +179,13 @@ contract Vol {
    function finalizeEpoch() external {
       uint256 epochIndex = epochs.length - 1;
       Epoch storage epoch = epochs[epochIndex];
-      require(epoch.startTime + timeInterval > block.timestamp);
+      require(epoch.startTime + timeInterval >= block.timestamp);
       epoch.finalPrice = getPrice();
       epoch.status = Status.Ended;
-      epoch.realizedVol = SignedMath.abs(int(epoch.startPrice - epoch.finalPrice)) / epoch.startPrice * 100;
+      epoch.realizedVol = 
+         epoch.startPrice > epoch.finalPrice ? 
+            ((epoch.startPrice - epoch.finalPrice) * 100) / epoch.startPrice: 
+            ((epoch.finalPrice - epoch.startPrice) * 100) / epoch.startPrice;
       uint256 ITMCapital;
       for(uint256 i; i < userPositions[epochIndex].length; ++i) {
          if(userPositions[epochIndex][i].volPrediction == epoch.realizedVol) {
@@ -129,14 +194,15 @@ contract Vol {
       }
       if(ITMCapital == 0) {
          ownerMoney += epoch.totalUsdc;
+         epoch.payOffPerDollar = 0;
+      } else {
+         epoch.payOffPerDollar = epoch.totalUsdc / ITMCapital;
       }
-
-      epoch.payOffPerDollar = epoch.totalUsdc / ITMCapital;
       epoch.status = Status.Ended;
       epochs.push(
          Epoch(
             epoch.startTime + timeInterval,
-            epoch.finalPrice,
+            0,
             0,
             0,
             0,
@@ -147,11 +213,25 @@ contract Vol {
    }
 
 
+   // @notice Function is called after bettingWindow is over
+   function setStartPrice() external {
+      require(epochs.length - 1 != 0);
+      uint256 epochIndex = epochs.length - 1;
+      Epoch storage epoch = epochs[epochIndex];
+      require(epoch.startTime + bettingWindow < block.timestamp);
+      epoch.startPrice = getPrice();
+   }
+
+
    // @notice Helper function to get current price of token.
-   function getPrice() internal view returns (uint256) {
-      (uint256 token1Amount, uint256 token2Amount, ) = pair.getReserves();
-      uint256 token1Price = token2Amount / token1Amount;
-      return token1Price;
+   function getPrice() public view returns (uint256) {
+      (uint256 token0Amount, uint256 token1Amount, ) = pair.getReserves();
+      if(pair.token0() == address(usdc)) {
+         return (token0Amount / 10 ** usdcDecimals) / (token1Amount / 10 ** token.decimals());
+      } else {
+         return (token1Amount / 10 ** token.decimals()) / (token0Amount / 10 ** usdcDecimals);
+      }
+
    }
 
    // @notice Helper function to withdraw owner money.
