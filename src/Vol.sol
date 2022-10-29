@@ -240,9 +240,4 @@ contract Vol {
       usdc.transfer(msg.sender, ownerMoney);
       ownerMoney = 0;
    }
-
-
-
-
-
 }
