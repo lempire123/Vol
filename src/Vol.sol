@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity  >=0.4.0 <0.9.0;
 
-import "openzeppelin-contracts/token/ERC20/IERC20.sol";
-import "openzeppelin-contracts/utils/math/SignedMath.sol";
-
+import "./Oracle.sol";
 
 interface IUniswapV2Pair {
     event Approval(address indexed owner, address indexed spender, uint value);
@@ -55,6 +53,109 @@ interface IUniswapV2Pair {
 
     function initialize(address, address) external;
 }
+
+interface IERC20 {
+    /**
+     * @dev Emitted when `value` tokens are moved from one account (`from`) to
+     * another (`to`).
+     *
+     * Note that `value` may be zero.
+     */
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    /**
+     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
+     * a call to {approve}. `value` is the new allowance.
+     */
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    /**
+     * @dev Returns the amount of tokens in existence.
+     */
+    function totalSupply() external view returns (uint256);
+
+    /**
+     * @dev Returns the amount of tokens owned by `account`.
+     */
+    function balanceOf(address account) external view returns (uint256);
+
+    function decimals() external view returns (uint256);
+
+    /**
+     * @dev Moves `amount` tokens from the caller's account to `to`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer(address to, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Returns the remaining number of tokens that `spender` will be
+     * allowed to spend on behalf of `owner` through {transferFrom}. This is
+     * zero by default.
+     *
+     * This value changes when {approve} or {transferFrom} are called.
+     */
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    /**
+     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * IMPORTANT: Beware that changing an allowance with this method brings the risk
+     * that someone may use both the old and the new allowance by unfortunate
+     * transaction ordering. One possible solution to mitigate this race
+     * condition is to first reduce the spender's allowance to 0 and set the
+     * desired value afterwards:
+     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
+     *
+     * Emits an {Approval} event.
+     */
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Moves `amount` tokens from `from` to `to` using the
+     * allowance mechanism. `amount` is then deducted from the caller's
+     * allowance.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool);
+}
+
+library SignedMath {
+    /**
+     * @dev Returns the largest of two signed numbers.
+     */
+    function max(int256 a, int256 b) internal pure returns (int256) {
+        return a > b ? a : b;
+    }
+
+    /**
+     * @dev Returns the smallest of two signed numbers.
+     */
+    function min(int256 a, int256 b) internal pure returns (int256) {
+        return a < b ? a : b;
+    }
+
+    /**
+     * @dev Returns the average of two signed numbers without overflow.
+     * The result is rounded towards zero.
+     */
+    function average(int256 a, int256 b) internal pure returns (int256) {
+        // Formula from the book "Hacker's Delight"
+        int256 x = (a & b) + ((a ^ b) >> 1);
+        return x + (int256(uint256(x) >> 255) & (a ^ b));
+    }
+}
    
 /**
 @title King of Vol
@@ -67,7 +168,7 @@ interface IUniswapV2Pair {
 contract Vol {
    using SignedMath for uint256;
    // UniswapV2pair used as oracle
-   IUniswapV2Pair public pair;
+   // IUniswapV2Pair public pair;
    // Token who's vol is being speculated on
    IERC20 public token;
    // Vol denomination
@@ -84,6 +185,8 @@ contract Vol {
    address public owner;
    // usdc decimals
    uint256 public usdcDecimals = 6;
+   // Oracle
+   UniswapV3Twap public oracle;
 
    // Status of each epoch
    enum Status {
@@ -112,19 +215,22 @@ contract Vol {
 
    // Constructor
    constructor(
-      address _pair,
+      // address _pair,
+      address _factory,
       address _token,
       address _usdc,
+      uint24 _fee,
       address _owner,
       uint256 _timeInterval,
       uint256 _bettingWindow
-   )  {
-      pair = IUniswapV2Pair(_pair);
+   ) public {
+      // pair = IUniswapV2Pair(_pair);
       token = IERC20(_token);
       usdc = IERC20(_usdc);
       timeInterval = _timeInterval;
       bettingWindow = _bettingWindow;
       owner = _owner;
+      oracle = new UniswapV3Twap(_factory, _token, _usdc, _fee);
       init();
    }
 
@@ -159,18 +265,20 @@ contract Vol {
    function claim(uint256 _epochIndex) external {
       Epoch storage epoch = epochs[_epochIndex];
       require(epoch.status == Status.Ended);
+      uint256 totalPayOff;
       for(uint256 i; i < userPositions[_epochIndex].length; ++i) {
          if(userPositions[_epochIndex][i].user == msg.sender) {
             if(userPositions[_epochIndex][i].volPrediction == epoch.realizedVol) {
                if(userPositions[_epochIndex][i].claimedReward == false) {
-                  uint256 totalPayOff = 
+                  uint256 payoff = 
                      userPositions[_epochIndex][i].capitalProvided * epoch.payOffPerDollar;
                   userPositions[_epochIndex][i].claimedReward = true;
-                  usdc.transfer(msg.sender, totalPayOff);
+                  totalPayOff += payoff;
                }
             }
          }
       }
+      usdc.transfer(msg.sender, totalPayOff);
    }
 
 
@@ -178,7 +286,7 @@ contract Vol {
    function finalizeEpoch() external {
       uint256 epochIndex = epochs.length - 1;
       Epoch storage epoch = epochs[epochIndex];
-      require(epoch.startTime + timeInterval >= block.timestamp);
+      require(epoch.startTime + timeInterval <= block.timestamp);
       epoch.finalPrice = getPrice();
       epoch.status = Status.Ended;
       epoch.realizedVol = 
@@ -216,7 +324,7 @@ contract Vol {
    }
 
 
-   // @notice Function is called after bettingWindow is over
+   // @notice Function is called after bettingWindow is over - sets initial price
    function setStartPrice() external {
       uint256 epochIndex = epochs.length - 1;
       Epoch storage epoch = epochs[epochIndex];
@@ -224,15 +332,8 @@ contract Vol {
       epoch.startPrice = getPrice();
    }
 
-
    // @notice Helper function to get current price of token.
-   function getPrice() public view returns (uint256) {
-      (uint256 token0Amount, uint256 token1Amount, ) = pair.getReserves();
-      if(pair.token0() == address(usdc)) {
-         return (token0Amount / 10 ** usdcDecimals) / (token1Amount / 10 ** token.decimals());
-      } else {
-         return (token1Amount / 10 ** token.decimals()) / (token0Amount / 10 ** usdcDecimals);
-      }
-
+   function getPrice() internal view returns (uint256) {
+      return uint256(oracle.estimateAmountOut(address(token), uint128(10 ** token.decimals()), 120));
    }
 }
