@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity  >=0.4.0 <0.9.0;
+pragma solidity >=0.4.0 <0.9.0;
+
 pragma experimental ABIEncoderV2;
 
 import "forge-std/Test.sol";
@@ -9,41 +10,44 @@ import "../src/Vol.sol";
 interface IUniswapV2Router02 {
     function removeLiquidityETHSupportingFeeOnTransferTokens(
         address token,
-        uint liquidity,
-        uint amountTokenMin,
-        uint amountETHMin,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
         address to,
-        uint deadline
-    ) external returns (uint amountETH);
+        uint256 deadline
+    ) external returns (uint256 amountETH);
     function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
         address token,
-        uint liquidity,
-        uint amountTokenMin,
-        uint amountETHMin,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
         address to,
-        uint deadline,
-        bool approveMax, uint8 v, bytes32 r, bytes32 s
-    ) external returns (uint amountETH);
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountETH);
 
     function swapExactTokensForTokensSupportingFeeOnTransferTokens(
-        uint amountIn,
-        uint amountOutMin,
+        uint256 amountIn,
+        uint256 amountOutMin,
         address[] calldata path,
         address to,
-        uint deadline
+        uint256 deadline
     ) external;
     function swapExactETHForTokensSupportingFeeOnTransferTokens(
-        uint amountOutMin,
+        uint256 amountOutMin,
         address[] calldata path,
         address to,
-        uint deadline
+        uint256 deadline
     ) external payable;
     function swapExactTokensForETHSupportingFeeOnTransferTokens(
-        uint amountIn,
-        uint amountOutMin,
+        uint256 amountIn,
+        uint256 amountOutMin,
         address[] calldata path,
         address to,
-        uint deadline
+        uint256 deadline
     ) external;
 }
 
@@ -70,7 +74,6 @@ contract VolTest is Test {
     uint256 public betWindow = 1 hours;
     uint256 public billi = 1_000_000_000 * 10 ** 6;
     uint24 public fee = 500;
-    
 
     function setUp() public {
         vol = new Vol(
@@ -99,15 +102,16 @@ contract VolTest is Test {
         vol.setStartPrice();
         // swapV3(1_000_000);
         vm.warp(block.timestamp + 23 hours);
-        swapV3(10_000_000);
+        swapV3(1_000_000);
         vm.warp(block.timestamp + 60);
         vol.finalizeEpoch();
-        (uint256 startTime,
-        uint256 startPrice,
-        uint256 finalPrice,
-        uint256 totalUsdc,
-        uint256 realizedVol,
-        uint256 payOffPerDollar,
+        (
+            uint256 startTime,
+            uint256 startPrice,
+            uint256 finalPrice,
+            uint256 totalUsdc,
+            uint256 realizedVol,
+            uint256 payOffPerDollar,
         ) = vol.epochs(0);
         emit log_named_uint("startTime", startTime);
         emit log_named_uint("startPrice", startPrice / 10 ** 6);
