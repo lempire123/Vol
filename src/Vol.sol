@@ -82,8 +82,6 @@ contract Vol {
    mapping(uint256 => Position[]) public userPositions;
    // Owner address
    address public owner;
-   // usdc given to humble owner
-   uint256 public ownerMoney;
    // usdc decimals
    uint256 public usdcDecimals = 6;
 
@@ -117,6 +115,7 @@ contract Vol {
       address _pair,
       address _token,
       address _usdc,
+      address _owner,
       uint256 _timeInterval,
       uint256 _bettingWindow
    )  {
@@ -125,6 +124,7 @@ contract Vol {
       usdc = IERC20(_usdc);
       timeInterval = _timeInterval;
       bettingWindow = _bettingWindow;
+      owner = _owner;
       init();
    }
 
@@ -192,8 +192,12 @@ contract Vol {
          }
       }
       if(ITMCapital == 0) {
-         ownerMoney += epoch.totalUsdc;
-         epoch.payOffPerDollar = 0;
+         if (userPositions[epochIndex].length - 1 >= 10) {
+            usdc.transfer(owner, epoch.totalUsdc);
+            epoch.payOffPerDollar = 0;
+         } else {
+             epoch.payOffPerDollar = 1;
+         } 
       } else {
          epoch.payOffPerDollar = epoch.totalUsdc / ITMCapital;
       }
@@ -230,12 +234,5 @@ contract Vol {
          return (token1Amount / 10 ** token.decimals()) / (token0Amount / 10 ** usdcDecimals);
       }
 
-   }
-
-   // @notice Helper function to withdraw owner money.
-   function withdrawMoney() external {
-      require(msg.sender == owner, "ONLY_OWNER_CAN_CALL");
-      usdc.transfer(msg.sender, ownerMoney);
-      ownerMoney = 0;
    }
 }

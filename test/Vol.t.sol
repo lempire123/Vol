@@ -51,15 +51,18 @@ contract CounterTest is Test {
     address public eth_usdc = 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc;
     address public usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address public eth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public owner = address(16);
     uint256 public Interval = 1 days;
     uint256 public betWindow = 1 hours;
     uint256 public billi = 1_000_000_000 * 10 ** 6;
+    
 
     function setUp() public {
         vol = new Vol(
             eth_usdc,
             eth,
             usdc,
+            owner,
             Interval,
             betWindow
         );
@@ -69,7 +72,9 @@ contract CounterTest is Test {
     }
 
     function testBet() public {
-        vol.bet(1_000, 4);
+        vol.bet(1_000, 5);
+        vol.bet(1_000, 5);
+        vol.bet(1_000, 5);
         vol.bet(1_000, 5);
         vm.warp(block.timestamp + 1 hours);
         vol.setStartPrice();
@@ -89,6 +94,7 @@ contract CounterTest is Test {
         console.log(totalUsdc);
         console.log(realizedVol);
         console.log(payOffPerDollar);
+        console.log(IERC20(usdc).balanceOf(owner));
     }
 
     function swap(uint256 amount) public {
