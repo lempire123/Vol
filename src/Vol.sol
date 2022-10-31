@@ -177,8 +177,6 @@ contract Vol {
     Epoch[] public epochs;
     // Mapping of user positions to epoch Id
     mapping(uint256 => Position[]) public userPositions;
-    // Owner address
-    address public owner;
     // usdc decimals
     uint256 public usdcDecimals = 6;
     // Oracle
@@ -216,7 +214,6 @@ contract Vol {
         address _token,
         address _usdc,
         uint24 _fee,
-        address _owner,
         uint256 _timeInterval,
         uint256 _bettingWindow
     ) public {
@@ -225,7 +222,6 @@ contract Vol {
         usdc = IERC20(_usdc);
         timeInterval = _timeInterval;
         bettingWindow = _bettingWindow;
-        owner = _owner;
         oracle = new UniswapV3Twap(_factory, _token, _usdc, _fee);
         init();
     }
@@ -284,12 +280,7 @@ contract Vol {
             }
         }
         if (ITMCapital == 0) {
-            if (userPositions[epochIndex].length - 1 >= 10) {
-                usdc.transfer(owner, epoch.totalUsdc);
-                epoch.payOffPerDollar = 0;
-            } else {
-                epoch.payOffPerDollar = 1;
-            }
+            epoch.payOffPerDollar = 1;
         } else {
             epoch.payOffPerDollar = epoch.totalUsdc / ITMCapital;
         }

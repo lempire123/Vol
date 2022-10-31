@@ -69,7 +69,6 @@ contract VolTest is Test {
     address public eth_usdc = 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc;
     address public usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address public eth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address public owner = address(16);
     uint256 public Interval = 1 days;
     uint256 public betWindow = 1 hours;
     uint256 public billi = 1_000_000_000 * 10 ** 6;
@@ -81,7 +80,6 @@ contract VolTest is Test {
             eth,
             usdc,
             fee,
-            owner,
             Interval,
             betWindow
         );
